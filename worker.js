@@ -1,4 +1,4 @@
-//
+
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), {
     status,
@@ -7,6 +7,81 @@ const json = (data, status = 200) =>
       "Cache-Control": "no-store"
     }
   });
+
+const ACCESS_DOMAIN = "royal-brook-a5e0.cloudflareaccess.com";
+
+function decodeBase64Url(value) {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="));
+  return Uint8Array.from(binary, c => c.charCodeAt(0));
+}
+
+async function verifyAccessToken(token, env) {
+  if (!token || !env.CF_ACCESS_AUD) return false;
+
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return false;
+
+    const header = JSON.parse(
+      new TextDecoder().decode(decodeBase64Url(parts[0]))
+    );
+
+    const payload = JSON.parse(
+      new TextDecoder().decode(decodeBase64Url(parts[1]))
+    );
+
+    if (header.alg !== "RS256" || !header.kid) return false;
+
+    const issuer = `https://${ACCESS_DOMAIN}`;
+
+    if (payload.iss !== issuer) return false;
+    if (!Array.isArray(payload.aud) ||
+        !payload.aud.includes(env.CF_ACCESS_AUD)) return false;
+
+    const now = Math.floor(Date.now() / 1000);
+
+    if (typeof payload.exp !== "number" ||
+        payload.exp <= now ||
+        typeof payload.nbf !== "number" ||
+        payload.nbf > now) return false;
+
+    const response = await fetch(`${issuer}/cdn-cgi/access/certs`);
+
+    if (!response.ok) return false;
+
+    const certs = await response.json();
+    const jwk = certs.keys?.find(
+      key => key.kid === header.kid && key.kty === "RSA"
+    );
+
+    if (!jwk) return false;
+
+    const key = await crypto.subtle.importKey(
+      "jwk",
+      jwk,
+      {
+        name: "RSASSA-PKCS1-v1_5",
+        hash: "SHA-256"
+      },
+      false,
+      ["verify"]
+    );
+
+    const data = new TextEncoder().encode(
+      `${parts[0]}.${parts[1]}`
+    );
+
+    return await crypto.subtle.verify(
+      "RSASSA-PKCS1-v1_5",
+      key,
+      decodeBase64Url(parts[2]),
+      data
+    );
+  } catch {
+    return false;
+  }
+}
 
 export default {
   async fetch(request, env) {
@@ -25,16 +100,26 @@ export default {
         return json({ error: "Method not allowed" }, 405);
       }
 
-      // Protect Make.com credentials on the server.
       if (!env.MAKE_API_TOKEN || !env.MAKE_ZONE) {
-        return json({ error: "Backend not configured" }, 503);
+        return json({ error: "Backend not configured" }, 500);
       }
 
-      // Authentication must be configured before
-      // exposing scenario information to the app.
+      const token = request.headers.get(
+        "Cf-Access-Jwt-Assertion"
+      );
+
+      const authorized = await verifyAccessToken(token, env);
+
+      if (!authorized) {
+        return json({ error: "Login required" }, 401);
+      }
+
+      // Authentication verified.
+      // Keep Make.com data blocked until the
+      // secure API integration is configured.
       return json({
-        error: "Authentication setup required"
-      }, 401);
+        error: "Make.com connection not enabled yet"
+      }, 503);
     }
 
     return json({ error: "Not found" }, 404);
