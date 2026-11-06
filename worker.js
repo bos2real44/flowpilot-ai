@@ -114,13 +114,34 @@ export default {
         return json({ error: "Login required" }, 401);
       }
 
-      // Authentication verified.
-      // Keep Make.com data blocked until the
-      // secure API integration is configured.
-      return json({
-        error: "Make.com connection not enabled yet"
-      }, 503);
-    }
+          const makeUrl =
+        "https://us2.make.com/api/v2/scenarios?organizationId=3356075";
+
+      try {
+        const response = await fetch(makeUrl, {
+          method: "GET",
+          headers: {
+            Authorization: "Token " + env.MAKE_API_TOKEN,
+            Accept: "application/json"
+          }
+        });
+
+        if (!response.ok) {
+          return json({
+            error: "Make.com request failed",
+            status: response.status
+          }, 502);
+        }
+
+        const data = await response.json();
+        return json({
+          scenarios: data.scenarios || []
+        });
+      } catch (error) {
+        return json({
+          error: "Unable to reach Make.com"
+        }, 502);
+      }    }
 
     return json({ error: "Not found" }, 404);
   }
