@@ -23,5 +23,23 @@ function markConfigured(id,step){const w=workflows.find(w=>w.id===id),s=w?.steps
 function removeOne(id){if(confirm('Delete this workflow?')){workflows=workflows.filter(w=>w.id!==id);persist()}}
 function resetAll(){if(confirm('Replace your local workflows with the three default templates?')){workflows=Object.keys(channels).map(template);persist()}}
 async function importAll(e){const f=e.target.files[0];if(!f)return;try{const v=JSON.parse(await f.text());if(!Array.isArray(v)||!v.every(w=>w&&typeof w.id==='string'&&typeof w.name==='string'&&Array.isArray(w.steps)))throw Error('Invalid workflow backup');if(!confirm('Replace current workflows with imported backup?'))return;workflows=v;persist();alert('Imported successfully')}catch(err){alert('Import failed: '+err.message)}e.target.value=''}
-render();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
+
+const FLOWPILOT_BACKEND = "https://flowpilot-ai-backend.idgt44.workers.dev";
+
+async function checkBackendConnection() {
+  try {
+    const response = await fetch(`${FLOWPILOT_BACKEND}/health`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    console.log("FlowPilot backend:", data.status);
+    return data.status === "online";
+  } catch (error) {
+    console.error("FlowPilot backend connection failed:", error);
+    return false;
+  }
+}
+
+checkBackendConnection();
+
+  render();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
 </script></body></html>
