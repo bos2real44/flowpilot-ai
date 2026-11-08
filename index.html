@@ -1,45 +1,431 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#10182b"><link rel="manifest" href="manifest.webmanifest"><title>FlowPilot AI — Automation Builder</title><style>
-:root{font-family:system-ui,-apple-system,sans-serif;color:#eef3ff;background:#0b1120}*{box-sizing:border-box}body{margin:0}header{padding:22px 18px;background:#121d34;border-bottom:1px solid #293954}main{max-width:900px;margin:auto;padding:18px}h1{font-size:23px;margin:0 0 5px}h2{font-size:19px}p,.muted{color:#b4c1d7}section{background:#15213a;border:1px solid #2b3d5c;border-radius:16px;padding:17px;margin:14px 0}input,textarea,select,button{font:inherit;border-radius:10px}input,textarea,select{width:100%;background:#0b152a;color:#fff;border:1px solid #435879;padding:12px;margin:7px 0}textarea{min-height:110px}button{background:#4d84ff;color:white;border:0;padding:12px 15px;cursor:pointer;margin:5px 5px 5px 0}button.secondary{background:#293b59}button.danger{background:#79364a}.row{display:flex;gap:8px;flex-wrap:wrap}.pill{display:inline-block;padding:5px 9px;border-radius:30px;background:#283e60;font-size:12px}.item{border:1px solid #354969;border-radius:12px;padding:12px;margin:10px 0}.good{color:#78e4ad}.bad{color:#ffb0b0}pre{white-space:pre-wrap;word-break:break-word;background:#091326;border-radius:10px;padding:12px;max-height:400px;overflow:auto}label{font-weight:600;font-size:14px}small{color:#aebdd5}a{color:#9dbdff}nav{display:flex;gap:8px;overflow:auto;padding:12px 18px;background:#101a30}nav button{white-space:nowrap}.hidden{display:none}footer{padding:20px;text-align:center;color:#91a2bc}
-</style></head><body><header><h1>⚡ FlowPilot AI</h1><div class="muted">Your personal automation control center · Local starter edition</div></header><nav><button onclick="tab('dashboard')">Dashboard</button><button onclick="tab('builder')">Builder</button><button onclick="tab('tests')">Test & Repair</button><button onclick="tab('settings')">Settings</button></nav><main>
-<div id="dashboard"><section><h2>My workflows</h2><p>Built-in channel templates are ready to customize. Nothing is published or connected yet.</p><div id="workflows"></div><button onclick="tab('builder')">+ Create workflow</button></section></div>
-<div id="builder" class="hidden"><section><h2>Describe your automation</h2><label for="prompt">What should happen?</label><textarea id="prompt" placeholder="Example: Every morning create a kids learning video script, review it, then prepare it for YouTube."></textarea><label for="channel">Template</label><select id="channel"><option value="general">General automation</option><option value="kids">Little Wonder Academy</option><option value="comedy">Daily Dose of Chaos</option><option value="history">Truth Behind the Surface</option></select><button onclick="build()">Generate workflow plan</button><small>Offline rule-based planning, not an LLM. Connect an AI provider in a future release.</small></section><section id="draftBox" class="hidden"><h2>Generated plan</h2><pre id="draft"></pre><button onclick="saveDraft()">Save workflow</button><button class="secondary" onclick="exportDraft()">Export JSON</button></section></div>
-<div id="tests" class="hidden"><section><h2>Test & Repair</h2><p>Select a saved workflow to validate required steps and simulate its route. Tests do not contact YouTube, Gemini, or Make.com.</p><select id="testSelect"></select><button onclick="runTest()">Run safe simulation</button><div id="testResult"></div></section></div>
-<div id="settings" class="hidden"><section><h2>Connections</h2><div class="item">Google Gemini <span class="pill">Not connected</span></div><div class="item">YouTube <span class="pill">Not connected</span></div><div class="item">Google Sheets <span class="pill">Not connected</span></div><div class="item">Make.com <span class="pill">Not connected</span></div><p>These are placeholders, not working connectors. Never paste API keys into this offline demo. A secure backend and OAuth are required before live integrations.</p></section><section><h2>Backup</h2><button onclick="exportAll()">Export all workflows</button><label for="importFile">Import workflow backup (JSON)</label><input type="file" id="importFile" accept="application/json,.json" onchange="importAll(event)"><button class="danger" onclick="resetAll()">Reset demo workflows</button></section></div>
-</main><footer>FlowPilot AI · Prototype v0.1 · No automatic external actions</footer><script>
-const KEY='flowpilot-workflows-v1';const channels={kids:{name:'Little Wonder Academy',topic:'Educational ABCs, numbers, colors and shapes',tone:'Friendly, age-appropriate'},comedy:{name:'Daily Dose of Chaos',topic:'Original, harmless comedy and relatable fails',tone:'Playful and family-friendly'},history:{name:'Truth Behind the Surface',topic:'Historical mysteries with clear distinctions between facts and speculation',tone:'Engaging and carefully sourced'}};
-const stages=['Schedule trigger','Choose topic','Generate original content plan','Review factual accuracy and safety','Generate script and scene directions','Prepare title, description and hashtags','Human approval','Prepare publishing package'];
-function template(id){const c=channels[id];return {id:crypto.randomUUID(),name:c.name,description:`Create ${c.topic.toLowerCase()} content`,channel:id,status:'draft',steps:stages.map((name,i)=>({id:i+1,name,configured:i!==0&&i!==7,requires:id==='history'&&i===3?'Sources and verification':i===0?'Schedule':i===7?'YouTube OAuth and publishing integration':null})),created:new Date().toISOString()}}
-function load(){try{const v=JSON.parse(localStorage.getItem(KEY));if(Array.isArray(v))return v}catch(e){}return Object.keys(channels).map(template)}let workflows=load(),draft=null;function persist(){localStorage.setItem(KEY,JSON.stringify(workflows));render()}
-function tab(id){for(const x of ['dashboard','builder','tests','settings'])document.getElementById(x).classList.toggle('hidden',x!==id);render()}
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function render(){document.getElementById('workflows').innerHTML=workflows.map(w=>`<div class="item"><b>${esc(w.name)}</b> <span class="pill">${esc(w.status)}</span><p>${esc(w.description)}</p><small>${w.steps.length} steps · ${w.steps.filter(s=>s.configured).length} configured</small><div class="row"><button class="secondary" onclick="inspect('${w.id}')">Inspect</button><button class="secondary" onclick="downloadOne('${w.id}')">Export</button><button class="danger" onclick="removeOne('${w.id}')">Delete</button></div></div>`).join('');document.getElementById('testSelect').innerHTML=workflows.map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join('')}
-function build(){const prompt=document.getElementById('prompt').value.trim(),type=document.getElementById('channel').value;if(!prompt){alert('Describe the automation first.');return}if(type!=='general'){draft=template(type);draft.description=prompt}else{draft={id:crypto.randomUUID(),name:prompt.slice(0,55),description:prompt,channel:'general',status:'draft',created:new Date().toISOString(),steps:[{id:1,name:'Choose trigger',configured:false,requires:'Trigger configuration'},{id:2,name:'Process request',configured:false,requires:'Supported service or API'},{id:3,name:'Review result',configured:true,requires:null},{id:4,name:'Execute approved action',configured:false,requires:'Authorized connector'}]}}document.getElementById('draft').textContent=JSON.stringify(draft,null,2);document.getElementById('draftBox').classList.remove('hidden')}
-function saveDraft(){if(!draft)return;workflows.push(draft);persist();tab('dashboard')}
-function download(name,obj){const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
-function exportDraft(){if(draft)download('flowpilot-workflow.json',draft)}function exportAll(){download('flowpilot-backup.json',workflows)}function downloadOne(id){const w=workflows.find(w=>w.id===id);if(w)download('flowpilot-'+w.channel+'.json',w)}
-function inspect(id){tab('tests');document.getElementById('testSelect').value=id;runTest()}
-function runTest(){const w=workflows.find(w=>w.id===document.getElementById('testSelect').value);if(!w)return;const missing=w.steps.filter(s=>!s.configured),out=document.getElementById('testResult');out.innerHTML=`<h3>${esc(w.name)}</h3><p class="${missing.length?'bad':'good'}">${missing.length?missing.length+' configuration item(s) need attention':'All local checks passed'}</p>`+w.steps.map(s=>`<div class="item"><span class="${s.configured?'good':'bad'}">${s.configured?'✓':'!'} ${esc(s.name)}</span>${s.configured?'':`<p>Repair suggestion: ${esc(s.requires||'Configure this step')}</p><button class="secondary" onclick="markConfigured('${w.id}',${s.id})">Mark configured (manual confirmation)</button>`}</div>`).join('')+'<p><small>Simulation only. Manual confirmation does not establish a real service connection.</small></p>'}
-function markConfigured(id,step){const w=workflows.find(w=>w.id===id),s=w?.steps.find(s=>s.id===step);if(s){s.configured=true;persist();runTest()}}
-function removeOne(id){if(confirm('Delete this workflow?')){workflows=workflows.filter(w=>w.id!==id);persist()}}
-function resetAll(){if(confirm('Replace your local workflows with the three default templates?')){workflows=Object.keys(channels).map(template);persist()}}
-async function importAll(e){const f=e.target.files[0];if(!f)return;try{const v=JSON.parse(await f.text());if(!Array.isArray(v)||!v.every(w=>w&&typeof w.id==='string'&&typeof w.name==='string'&&Array.isArray(w.steps)))throw Error('Invalid workflow backup');if(!confirm('Replace current workflows with imported backup?'))return;workflows=v;persist();alert('Imported successfully')}catch(err){alert('Import failed: '+err.message)}e.target.value=''}
 
-const FLOWPILOT_BACKEND = "https://flowpilot-ai-backend.idgt44.workers.dev";
-
-async function checkBackendConnection() {
-  try {
-    const response = await fetch(`${FLOWPILOT_BACKEND}/health`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
-    console.log("FlowPilot backend:", data.status);
-    return data.status === "online";
-  } catch (error) {
-    console.error("FlowPilot backend connection failed:", error);
-    return false;
-  }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#041020">
+<link rel="manifest" href="manifest.webmanifest">
+<title>FlowPilot AI 3.0</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color:#eef8ff;background:#030b17}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at top right,#073d78,transparent 45%),#030b17;min-height:100vh}
+button,input,select{font:inherit}
+button{cursor:pointer}
+.app{max-width:1050px;margin:auto;padding:18px 13px 105px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.logo{width:62px;height:62px;border:2px solid #26dcff;border-radius:50%;display:grid;place-items:center;font-size:43px;font-style:italic;font-weight:1000;background:linear-gradient(135deg,#087ae8,#071a3a);box-shadow:0 0 25px #00baff88}
+.brand{flex:1;min-width:0}
+.brand h1{font-size:clamp(22px,5vw,35px);font-style:italic;margin:0;letter-spacing:-1px}
+.brand h1 span{color:#16dfff}
+.brand p{color:#a7c8e5;margin:3px 0;font-size:12px}
+.bell{border:1px solid #2874a7;border-radius:50%;background:#10243c;color:white;width:38px;height:38px;font-size:21px}
+.nav{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px}
+.nav button{border:1px solid #315e89;border-radius:13px;min-height:77px;background:linear-gradient(145deg,#172e4b,#071527);color:white;font-size:11px;font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px}
+.nav button span{font-size:27px}
+.nav button.active{background:linear-gradient(145deg,#04a9fa,#0742ae);border-color:#35e1ff;box-shadow:0 0 19px #008dff88}
+.panel{background:linear-gradient(135deg,#102941,#07182c);border:1px solid #315d87;border-radius:16px;margin-bottom:13px;overflow:hidden;box-shadow:inset 0 1px #ffffff16,0 7px 22px #0005}
+.hero{position:relative;padding:25px 19px 13px;min-height:240px;background:radial-gradient(ellipse at 78% 40%,#0759a4,transparent 58%),linear-gradient(120deg,#07182c,#102a4d)}
+.hero-copy{position:relative;z-index:2;max-width:53%}
+.hero h2{font-size:clamp(25px,5vw,37px);line-height:1.06;margin:0 0 10px}
+.hero p{color:#b9d0e8;font-size:13px;line-height:1.5}
+.edition{display:inline-block;background:#073e70;border:1px solid #069cdd;color:#55e3ff;padding:6px 12px;border-radius:20px;font-size:11px;font-weight:800}
+.robot{position:absolute;right:6%;top:18px;width:170px;height:158px;filter:drop-shadow(0 0 22px #009fff)}
+.robot-head{position:absolute;top:7px;left:25px;width:120px;height:90px;border:7px solid #8ddfff;border-radius:45%;background:linear-gradient(145deg,#b8eaff,#376ca4 35%,#061326 45%);box-shadow:inset 0 0 20px #00aaff}
+.robot-face{position:absolute;inset:20px 10px 12px;background:#020d1d;border-radius:35px;display:flex;align-items:center;justify-content:center;gap:22px}
+.eye{width:22px;height:9px;border-radius:100%;background:#29eaff;box-shadow:0 0 14px #00dfff}
+.robot-body{position:absolute;top:100px;left:35px;width:100px;height:55px;border:5px solid #72cfff;border-radius:50% 50% 18% 18%;background:linear-gradient(120deg,#418ed1,#07162c)}
+.robot-body:after{content:"F";position:absolute;left:39px;top:12px;color:#2ce9ff;font-weight:1000;font-size:24px;font-style:italic}
+.metrics{position:relative;z-index:3;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:25px}
+.metric{border:1px solid #3876a5;border-radius:11px;background:#0b2139ed;padding:9px 5px;text-align:center}
+.metric strong{font-size:23px;display:block}
+.metric small{color:#b6cce1;font-size:10px}
+.metric .symbol{color:#27e4ff;font-size:19px}
+.heading{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 13px 10px}
+.heading h2{margin:0;font-size:19px}
+.heading h2 span{color:#59dfff}
+.action{border:1px solid #1689db;border-radius:10px;background:linear-gradient(#058bef,#0644b1);color:white;font-size:12px;font-weight:800;padding:9px 12px;box-shadow:0 0 12px #008cff55}
+.action.green{background:linear-gradient(#06775d,#064133);border-color:#04a87f}
+.action.secondary{background:#142c48;border-color:#456b94;box-shadow:none}
+.connections{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 11px 12px}
+.connection{background:#112943;border:1px solid #315d84;border-radius:11px;padding:11px 7px;min-height:73px;display:flex;align-items:center;gap:7px}
+.connection .icon{font-size:25px}
+.connection b{font-size:11px;display:block}
+.connection small{font-size:10px;color:#abc0d8}
+.connection .ok{color:#3af3a9}
+.workflows{display:grid;gap:9px;padding:0 11px 12px}
+.workflow{display:flex;gap:12px;align-items:center;border:1px solid #315d85;background:#112943;border-radius:12px;padding:8px}
+.thumb{width:125px;min-width:125px;height:84px;border-radius:10px;display:grid;place-items:center;text-align:center;font-weight:900;text-shadow:0 2px 5px #000a;overflow:hidden}
+.thumb .emoji{font-size:37px}
+.thumb.kids{background:linear-gradient(135deg,#30d3ef,#a05df1,#ffb12c)}
+.thumb.comedy{background:linear-gradient(135deg,#44206a,#d84e18,#f9bc1b)}
+.thumb.history{background:linear-gradient(135deg,#76766d,#171d2a,#47372a)}
+.wfbody{flex:1;min-width:0}
+.wfbody h3{margin:0 0 4px;font-size:15px}
+.wfbody p{font-size:11px;color:#b9cde0;margin:0 0 6px}
+.wfmeta{font-size:10px;color:#7ccfff}
+.track{height:7px;border-radius:9px;background:#28425e;overflow:hidden;flex:1}
+.fill{height:100%;width:75%;background:linear-gradient(90deg,#007bff,#14e6ff);box-shadow:0 0 12px #00cfff}
+.progress{display:flex;gap:7px;align-items:center;margin-top:6px}
+.progress small{font-size:10px}
+.status{font-size:10px;color:#4cf0c7;background:#06493f;border:1px solid #078b77;padding:4px 8px;border-radius:20px;white-space:nowrap}
+.toolgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;padding:0 11px 12px}
+.tool{min-height:90px;border:1px solid #365f8b;background:linear-gradient(145deg,#1a3353,#0a192d);border-radius:12px;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;font-size:10px;font-weight:700;text-align:center;padding:6px}
+.tool span{font-size:27px;color:#37e3ff}
+.activity{padding:0 15px 15px;display:flex;align-items:center;gap:12px}
+.activity .check{color:#46ef8e;font-size:28px}
+.activity b{display:block;font-size:13px}
+.activity small{display:block;color:#a7bed4;font-size:11px}
+.bottom{position:fixed;bottom:0;left:0;right:0;z-index:10;background:#071b30f5;border-top:1px solid #2085bf;display:flex;justify-content:space-around;align-items:center;padding:9px 5px calc(9px + env(safe-area-inset-bottom));box-shadow:0 -8px 25px #008cff22}
+.bottom button{border:0;background:transparent;color:#d0e6fa;font-size:10px;display:flex;flex-direction:column;align-items:center;gap:3px}
+.bottom button span{font-size:25px}
+.bottom .plus{width:55px;height:55px;border:2px solid #2aeaff;border-radius:50%;background:linear-gradient(#008af2,#062b78);box-shadow:0 0 18px #008cff;color:white;font-size:34px;display:grid;place-items:center;transform:translateY(-9px)}
+.hidden{display:none!important}
+.content{padding:19px}
+.content h2{margin:0 0 8px}
+.muted{color:#adc7df;line-height:1.5;font-size:13px}
+label{display:block;margin:13px 0 6px;font-size:12px;font-weight:700}
+input,select{display:block;width:100%;padding:12px;border-radius:9px;background:#061629;border:1px solid #37658c;color:white}
+.row{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}
+.scenario{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid #315579;border-radius:11px;padding:12px;margin-top:9px;background:#10263e}
+.scenario b{display:block;font-size:13px}
+.scenario small{display:block;color:#9eb9d2;margin-top:4px}
+.scenario .state{color:#c1d1e0;font-size:11px}
+.scenario .state.on{color:#40efa5}
+.diagnostic{white-space:pre-wrap;overflow-wrap:anywhere;background:#061426;border:1px solid #315579;border-radius:11px;padding:14px;margin-top:14px;font-size:12px;line-height:1.7}
+.footer{text-align:center;color:#6588ac;font-size:10px;padding:20px}
+@media(max-width:550px){
+.nav{gap:5px}.nav button{font-size:9px;min-height:71px}.nav button span{font-size:23px}
+.brand h1{font-size:23px}.brand p{font-size:10px}
+.robot{right:-8px;transform:scale(.79);transform-origin:top right}
+.hero-copy{max-width:56%}.hero{padding:21px 12px 12px}
+.metrics{gap:5px}.metric strong{font-size:19px}.metric small{font-size:9px}
+.connections{grid-template-columns:repeat(2,1fr)}
+.toolgrid{grid-template-columns:repeat(3,1fr)}
+.thumb{width:100px;min-width:100px;height:80px}
+.wfbody h3{font-size:13px}
 }
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+<div class="logo">F</div>
+<div class="brand">
+<h1>FlowPilot AI <span>3.0</span></h1>
+<p>Your All-in-One Automation Control Center</p>
+</div>
+<button class="bell" id="notifications" aria-label="Notifications">♧</button>
+</header>
 
-checkBackendConnection();
+<nav class="nav">
+<button class="active" data-tab="dashboard"><span>⌂</span>Dashboard</button>
+<button data-tab="builder"><span>▱</span>Builder</button>
+<button data-tab="automations"><span>▷</span>Automations</button>
+<button data-tab="repair"><span>⚒</span>Test & Repair</button>
+<button data-tab="settings"><span>⚙</span>Settings</button>
+</nav>
 
-  render();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
-</script></body></html>
+<main>
+<div id="dashboard">
+<section class="panel hero">
+<div class="hero-copy">
+<h2>Welcome Back,<br>Brandon!</h2>
+<p>Manage, automate, and grow your projects with AI.</p>
+<span class="edition">FlowPilot AI Control Center</span>
+</div>
+<div class="robot" aria-hidden="true">
+<div class="robot-body"></div>
+<div class="robot-head"><div class="robot-face"><div class="eye"></div><div class="eye"></div></div></div>
+</div>
+<div class="metrics">
+<div class="metric"><span class="symbol">▷</span><strong id="workflowCount">3</strong><small>Workflows</small></div>
+<div class="metric"><span class="symbol">♧</span><strong id="runningCount">—</strong><small>Running</small></div>
+<div class="metric"><span class="symbol">▦</span><strong>—</strong><small>Scheduled</small></div>
+<div class="metric"><span class="symbol">✓</span><strong>—</strong><small>Completed</small></div>
+</div>
+</section>
+
+<section class="panel">
+<div class="heading"><h2><span>♧</span> Connections</h2><button class="action green" data-tab="settings">Manage Connections</button></div>
+<div class="connections">
+<div class="connection"><span class="icon">✦</span><div><b>Google Gemini</b><small>○ Not verified</small></div></div>
+<div class="connection"><span class="icon">▶️</span><div><b>YouTube</b><small>○ Not verified</small></div></div>
+<div class="connection"><span class="icon">📗</span><div><b>Google Sheets</b><small>○ Not verified</small></div></div>
+<div class="connection"><span class="icon">🟣</span><div><b>Make.com</b><small id="makeStatus">○ Checking</small></div></div>
+</div>
+</section>
+
+<section class="panel">
+<div class="heading"><h2><span>▱</span> My Workflows</h2><button class="action" data-tab="builder">+ Create Workflow</button></div>
+<div class="workflows">
+<div class="workflow">
+<div class="thumb kids"><div><div class="emoji">👦🏽🌈</div>ABC 123</div></div>
+<div class="wfbody"><h3>Little Wonder Academy</h3><p>Educational content: ABCs, numbers, colors, and shapes</p><div class="wfmeta">▱ 8 planned steps | 6 configured</div><div class="progress"><div class="track"><div class="fill"></div></div><small>75%</small></div></div>
+<span class="status">Draft</span>
+</div>
+<div class="workflow">
+<div class="thumb comedy"><div><div class="emoji">😂🎬</div>DAILY DOSE<br>OF CHAOS</div></div>
+<div class="wfbody"><h3>Daily Dose of Chaos</h3><p>Original, family-friendly comedy, fails, and relatable humor</p><div class="wfmeta">▱ 8 planned steps | 6 configured</div><div class="progress"><div class="track"><div class="fill"></div></div><small>75%</small></div></div>
+<span class="status">Draft</span>
+</div>
+<div class="workflow">
+<div class="thumb history"><div><div class="emoji">🏛️🕵️</div>TRUTH BEHIND<br>THE SURFACE</div></div>
+<div class="wfbody"><h3>Truth Behind the Surface</h3><p>Dark history, forgotten events, and real-world mysteries</p><div class="wfmeta">▱ 8 planned steps | 6 configured</div><div class="progress"><div class="track"><div class="fill"></div></div><small>75%</small></div></div>
+<span class="status">Draft</span>
+</div>
+</div>
+</section>
+
+<section class="panel">
+<div class="heading"><h2><span>✦</span> AI Tools & Actions</h2></div>
+<div class="toolgrid">
+<button class="tool" data-tool="Generate Content"><span>▷</span>Generate<br>Content</button>
+<button class="tool" data-tool="Create Videos"><span>▣</span>Create<br>Videos</button>
+<button class="tool" data-tool="Create Thumbnails"><span>▧</span>Create<br>Thumbnails</button>
+<button class="tool" data-tool="Schedule & Publish"><span>▦</span>Schedule<br>& Publish</button>
+<button class="tool" data-tab="repair"><span>⚒</span>Test &<br>Repair</button>
+<button class="tool" data-tab="automations"><span>▥</span>Analytics<br>(Basic)</button>
+</div>
+</section>
+
+<section class="panel">
+<div class="heading"><h2><span>◷</span> Recent Activity</h2><button class="action secondary" data-tab="automations">View All</button></div>
+<div class="activity">
+<span class="check" id="activityIcon">◌</span>
+<div><b id="activityTitle">Checking FlowPilot backend…</b><small id="activityDescription">Waiting for health check</small></div>
+</div>
+</section>
+</div>
+
+<div id="automations" class="hidden">
+<section class="panel content">
+<h2>⚡ Live Automations</h2>
+<p class="muted" id="scenarioSummary">Checking Make.com…</p>
+<div class="row"><button class="action" id="refresh">↻ Refresh Scenarios</button></div>
+<div id="scenarioList"></div>
+</section>
+<section class="panel content"><h2>Execution Controls</h2><p class="muted">This dashboard reads scenario status. Running, changing, or publishing workflows requires additional authenticated backend endpoints and approval controls.</p></section>
+</div>
+
+<div id="builder" class="hidden">
+<section class="panel content">
+<h2>✦ AI Workflow Builder</h2>
+<p class="muted">Create and save workflow plans on this device. Saving does not deploy or execute them.</p>
+<label for="workflowName">Workflow name</label>
+<input id="workflowName" placeholder="My new automation" maxlength="100">
+<label for="workflowChannel">Channel</label>
+<select id="workflowChannel"><option>Little Wonder Academy</option><option>Daily Dose of Chaos</option><option>Truth Behind the Surface</option><option>Other</option></select>
+<label for="workflowFormat">Video format</label>
+<select id="workflowFormat"><option>Shorts + long-form</option><option>YouTube Shorts</option><option>Long-form</option></select>
+<div class="row"><button class="action" id="savePlan">Save Workflow Plan</button><button class="action secondary" id="exportPlans">Export Backup</button></div>
+</section>
+<section class="panel content"><h2>Saved Plans</h2><div id="savedPlans"></div></section>
+</div>
+
+<div id="repair" class="hidden">
+<section class="panel content">
+<h2>⚒ Test & Repair</h2>
+<p class="muted">Run read-only checks of your Cloudflare backend and Make.com API connection.</p>
+<button class="action" id="diagnose">Run Diagnostics</button>
+<div class="diagnostic" id="diagnosticOutput">Ready to test.</div>
+</section>
+</div>
+
+<div id="settings" class="hidden">
+<section class="panel content">
+<h2>⚙ Connection Settings</h2>
+<p class="muted">Your Make.com API token must remain in Cloudflare. Never enter it here.</p>
+<label for="backendUrl">Cloudflare Worker URL</label>
+<input id="backendUrl" type="url" spellcheck="false">
+<div class="row"><button class="action" id="saveBackend">Save & Test</button><button class="action secondary" id="resetBackend">Restore Default</button></div>
+<p class="muted" id="connectionStatus">Connection not yet verified.</p>
+</section>
+</div>
+</main>
+<div class="footer">FlowPilot AI 3.0 · Automation Control Center</div>
+</div>
+
+<nav class="bottom">
+<button data-tab="dashboard"><span>⌂</span>Home</button>
+<button data-tab="automations"><span>ϟ</span>Automations</button>
+<button class="plus" data-tab="builder" aria-label="Create workflow">+</button>
+<button data-tab="automations"><span>▥</span>Analytics</button>
+<button data-tab="settings"><span>♙</span>Profile</button>
+</nav>
+
+<script>
+(()=>{
+"use strict";
+const DEFAULT="https://flowpilot-ai-backend.idgt44.workers.dev";
+const $=id=>document.getElementById(id);
+let backend=localStorage.getItem("flowpilot_backend")||DEFAULT;
+const sections=["dashboard","builder","automations","repair","settings"];
+
+function showTab(name){
+sections.forEach(id=>$(id).classList.toggle("hidden",id!==name));
+document.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("active",b.dataset.tab===name));
+window.scrollTo(0,0);
+}
+document.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>showTab(b.dataset.tab)));
+document.querySelectorAll("[data-tool]").forEach(b=>b.addEventListener("click",()=>alert(b.dataset.tool+" requires an authorized integration. It is not yet available.")));
+$("notifications").onclick=()=>showTab("automations");
+
+function plans(){
+try{
+const a=JSON.parse(localStorage.getItem("flowpilot_plans")||"[]");
+return Array.isArray(a)?a:[];
+}catch{return [];}
+}
+function renderPlans(){
+const host=$("savedPlans");
+host.replaceChildren();
+const arr=plans();
+$("workflowCount").textContent=3+arr.length;
+if(!arr.length){host.textContent="No saved plans yet.";return;}
+arr.forEach(p=>{
+const row=document.createElement("div");
+row.className="scenario";
+const info=document.createElement("div");
+const title=document.createElement("b");
+title.textContent=p.name;
+const detail=document.createElement("small");
+detail.textContent=p.channel+" · "+p.format;
+info.append(title,detail);
+const del=document.createElement("button");
+del.className="action secondary";
+del.textContent="Delete";
+del.onclick=()=>{
+if(!confirm("Delete this local plan?"))return;
+localStorage.setItem("flowpilot_plans",JSON.stringify(plans().filter(x=>x.id!==p.id)));
+renderPlans();
+};
+row.append(info,del);
+host.append(row);
+});
+}
+$("savePlan").onclick=()=>{
+const name=$("workflowName").value.trim();
+if(!name){alert("Enter a workflow name.");return;}
+const arr=plans();
+arr.push({id:String(Date.now()),name,channel:$("workflowChannel").value,format:$("workflowFormat").value});
+localStorage.setItem("flowpilot_plans",JSON.stringify(arr));
+renderPlans();
+alert("Plan saved locally. It has not been deployed.");
+};
+$("exportPlans").onclick=()=>{
+const blob=new Blob([JSON.stringify({app:"FlowPilot AI",plans:plans()},null,2)],{type:"application/json"});
+const url=URL.createObjectURL(blob);
+const a=document.createElement("a");
+a.href=url;
+a.download="flowpilot-backup.json";
+a.click();
+setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+
+$("backendUrl").value=backend;
+$("saveBackend").onclick=()=>{
+const value=$("backendUrl").value.trim();
+try{
+const u=new URL(value);
+if(u.protocol!=="https:"||!u.hostname.endsWith(".workers.dev")||u.username||u.password||u.search||u.hash||u.pathname!=="/")throw Error();
+backend=u.origin;
+localStorage.setItem("flowpilot_backend",backend);
+refresh();
+}catch{alert("Enter a valid HTTPS Cloudflare workers.dev base URL.");}
+};
+$("resetBackend").onclick=()=>{
+backend=DEFAULT;
+$("backendUrl").value=DEFAULT;
+localStorage.removeItem("flowpilot_backend");
+refresh();
+};
+
+async function request(path){
+const controller=new AbortController();
+const timer=setTimeout(()=>controller.abort(),12000);
+try{
+const response=await fetch(backend+path,{
+headers:{Accept:"application/json"},
+credentials:"omit",
+cache:"no-store",
+signal:controller.signal
+});
+const data=await response.json();
+if(!response.ok)throw Error(data.error||"HTTP "+response.status);
+return data;
+}finally{clearTimeout(timer);}
+}
+function renderScenarios(items){
+const host=$("scenarioList");
+host.replaceChildren();
+if(!items.length){host.textContent="No scenarios returned.";return;}
+items.forEach(item=>{
+const row=document.createElement("div");
+row.className="scenario";
+const info=document.createElement("div");
+const title=document.createElement("b");
+title.textContent=String(item.name||"Unnamed scenario");
+const id=document.createElement("small");
+id.textContent="Scenario ID: "+String(item.id||"Unknown");
+info.append(title,id);
+const status=document.createElement("span");
+status.className="state"+(item.isActive===true?" on":"");
+status.textContent=item.isActive===true?"Enabled":"Inactive";
+row.append(info,status);
+host.append(row);
+});
+}
+async function refresh(){
+$("scenarioSummary").textContent="Checking Make.com…";
+$("makeStatus").textContent="○ Checking";
+try{
+const health=await request("/health");
+$("activityTitle").textContent=health.status==="online"?"FlowPilot AI backend online":"Backend response received";
+$("activityDescription").textContent="Health check · "+String(health.version||"Unknown version");
+$("activityIcon").textContent="✓";
+}catch(e){
+$("activityTitle").textContent="Backend check unavailable";
+$("activityDescription").textContent=e.message;
+$("activityIcon").textContent="!";
+}
+try{
+const data=await request("/scenarios");
+if(!Array.isArray(data.scenarios))throw Error("Unexpected scenario response");
+const active=data.scenarios.filter(s=>s.isActive===true).length;
+$("runningCount").textContent=active;
+$("makeStatus").textContent="● API verified";
+$("makeStatus").className="ok";
+$("scenarioSummary").textContent=data.scenarios.length+" scenarios found · "+active+" enabled";
+$("connectionStatus").textContent="Make.com scenario access verified in this browser.";
+renderScenarios(data.scenarios);
+}catch(e){
+$("runningCount").textContent="—";
+$("makeStatus").textContent="○ Not verified";
+$("scenarioSummary").textContent="Unable to load scenarios: "+e.message;
+$("connectionStatus").textContent="Browser API access not verified: "+e.message;
+$("scenarioList").textContent="Try Test & Repair. Cloudflare Access or CORS may prevent cross-site requests.";
+}
+}
+$("refresh").onclick=refresh;
+$("diagnose").onclick=async()=>{
+const lines=[];
+$("diagnosticOutput").textContent="Running checks…";
+for(const [name,path] of [["Cloudflare health","/health"],["Make.com scenarios","/scenarios"]]){
+try{
+const data=await request(path);
+lines.push("✓ "+name+": "+(path==="/health"?String(data.status):String(data.scenarios?.length??"Unexpected response")+" scenarios"));
+}catch(e){
+lines.push("✕ "+name+": "+e.message);
+}
+}
+lines.push("Note: Safari direct access can succeed while cross-site requests fail due to authentication or CORS.");
+$("diagnosticOutput").textContent=lines.join("\n");
+};
+renderPlans();
+refresh();
+})();
+</script>
+</body>
+</html>
